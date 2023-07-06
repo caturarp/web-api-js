@@ -1,0 +1,74 @@
+<!DOCTYPE html>
+<html>
+
+<head>
+    <meta charset="utf-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1">
+    <link rel="stylesheet" href="https://cdn.jsdelivr.net/npm/bootstrap@4.6.1/dist/css/bootstrap.min.css">
+</head>
+
+<body>
+
+    <div id="app" class="container">
+        <div class="row">
+            <div class="col-12" id="qrcode-wrapper">
+                <center><p class="small">Silahkan Refresh jika qrcode tidak muncul</p><center>
+                <center><img src="" id="qrcode" style="width: 200px; height: auto;"><center>
+            </div>
+            <div class="col-12" id="disconnect-wrapper">
+                <center><p class="small"></p><center>
+                <center>
+                    <div style="position: relative;">
+                        <img src="/qr.png" style="width: 200px; height: auto; opacity: 0.3;">
+                        <div id="ref" style="position: absolute; top: 45%; left: 0; right: 0;"></div>
+                    </div>
+                <center>
+            </div>
+            <div class="col-12" style="display: none;">
+                <h5>Logs:</h3>
+                <ul class="logs"></ul>
+            </div>
+        </div>
+    </div>
+
+    <script src="https://cdnjs.cloudflare.com/ajax/libs/jquery/3.5.1/jquery.min.js"></script>
+    <script src="https://cdn.socket.io/4.4.1/socket.io.min.js"></script>
+    <script>
+        const url = window.location.href;
+        const lastSegment = url.split("/").pop();
+        $('#qrcode').hide();
+        $('#disconnect-wrapper').hide();
+
+        var socket = io();
+            
+        socket.emit('StartConnection',lastSegment);
+        socket.on('message', function (msg) {
+            $('.logs').append($('<li>').text(msg));
+        });
+
+        socket.on('qr', function (src) {
+            $('#qrcode').attr('src', src);
+            $('#qrcode').show();
+        });
+
+        socket.on('ready', function (data) {
+            $('#logout').attr('href', '/logout/' + data);
+            $("#ref").html('<button class="btn btn-danger mb-3" id="logout" onclick="logout('+data+')">Disconnect</button>');
+            $('#qrcode').hide();
+            $('#qrcode-wrapper').hide();
+            $('#disconnect-wrapper').show();
+        });
+    
+        function logout(device){
+            socket.emit('LogoutDevice',device);
+            socket.emit('StartConnection',lastSegment);
+            $("#ref").html('');
+            $('#disconnect-wrapper').hide();
+            $('#qrcode').attr('src', '');
+            $('#qrcode').hide();
+            $('#qrcode-wrapper').show();
+        }        
+    </script>
+</body>
+
+</html>

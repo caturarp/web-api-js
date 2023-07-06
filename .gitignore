@@ -1,0 +1,16 @@
+# Dependency directories
+node_modules/
+
+# Sessions
+.wwebjs_auth/
+.wwebjs_cache/
+sessions/
+
+# Vscode config
+.vscode/
+
+# environment variables
+.env
+
+# readme
+readme.md
