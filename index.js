@@ -26,11 +26,6 @@ let initApp = (clientId) => {
   try {
     const { Client, LocalAuth, Location, MessageMedia, MessageTypes } = require('whatsapp-web.js');
 
-  // if (!fs.existsSync(clientSessionPath)) {
-  //     fs.mkdirSync(sessionPath);
-  //     logger.info(`sessions folder for client x created ✅`)
-  // }
-  
   const client = new Client({
     authStrategy: new LocalAuth({
         dataPath: sessionPath,
@@ -62,13 +57,14 @@ let initApp = (clientId) => {
   });
 
   client.on('message', async (msg, clientId) => {
-      handleMessage(msg, clientId)
-      logger.info(`client ${clientId} successfully sent message.`)
+      let messageType = await handleMessage(msg, clientId)
+      logger.info(`${messageType} command successfully executed.`)
   });
 
-  client.on('disconnected', (reason) => {
+  client.on('disconnected', async (reason) => {
     logger.info(`client ${clientId} disconnected: ${reason}`);
     delete activeSessions[clientId]; // Remove the session from sessions object
+    // await client.destroy();
     deleteSession();
     // client.initialize();
   }); 
@@ -88,41 +84,6 @@ let initApp = (clientId) => {
     }
   };
   
-
-  // const deleteSession = async () => {
-  //   // const sessionDirectory = sessionPath.concat(`session-${clientId}`);
-  //   const sessionDirectory = sessionPath;
-    
-  //   try {
-  //     if (fs.existsSync(sessionDirectory)) {
-  //       await removeSessionDirectory(sessionDirectory);
-  //       logger.info(`Session directory deleted: ${sessionDirectory}`);
-  //     } else {
-  //       logger.info(`Session directory does not exist: ${sessionDirectory}`);
-  //     }
-  //   } catch (error) {
-  //     logger.error(`Error deleting session directory: ${error}`);
-  //   }
-  // }
-  
-  // const removeSessionDirectory = async (clientId, retryCount = 3, retryDelay = 1000) => {
-  //   while (retryCount > 0) {
-  //     try {
-  //       await client.destroy(); 
-  //       await fs.emptyDir(sessionDirectory); // Remove all files and subdirectories
-  //       await fs.remove(sessionDirectory); // Remove the empty directory
-  //       return; // Exit the loop if deletion is successful
-  //     } catch (error) {
-  //       retryCount--;
-  //       await delay(retryDelay); // Delay before retrying the deletion
-  //     }
-  //   }
-  // }
-
-  // const delay = async (duration) => {
-  //   return new Promise(resolve => setTimeout(resolve, duration));
-  // }
-
   const handleMessage = async (message) => {
     const { from, type, body, to, hasQuotedMsg } = message;
     
@@ -150,52 +111,59 @@ let initApp = (clientId) => {
           }
           break;
         case 'audio':
-          await client.sendMessage(from, 'Terima kasih atas audio yang Anda kirim! Saya akan mendengarkannya.');
+          logger.info('audio received')
+          // await client.sendMessage(from, 'Terima kasih atas audio yang Anda kirim! Saya akan mendengarkannya.');
           break;
-        case 'voice':
-          await client.sendMessage(from, 'Terima kasih atas suara yang Anda kirim! Saya akan mendengarkan pesan suara Anda.');
+        case 'ptt': // voice
+          logger.info('voice received')
+          // await client.sendMessage(from, 'Terima kasih atas suara yang Anda kirim! Saya akan mendengarkan pesan suara Anda.');
           break;
         case 'video':
-          await client.sendMessage(from, 'Terima kasih atas video yang Anda kirim! Saya akan menontonnya.');
+          logger.info('video received')
+          // await client.sendMessage(from, 'Terima kasih atas video yang Anda kirim! Saya akan menontonnya.');
           break;
         case 'document':
-          await client.sendMessage(from, 'Terima kasih atas dokumen yang Anda kirim! Saya akan membacanya.');
+          logger.info('document received')
+          // await client.sendMessage(from, 'Terima kasih atas dokumen yang Anda kirim! Saya akan membacanya.');
           break;
         case 'sticker':
           // try MessageMedia property
-          // await client.sendMessage(from, 'Terima kasih atas stiker yang Anda kirim! Sangat lucu!');
-          const sticker = MessageMedia.fromFilePath('./yeji.jpg');
-          await client.sendMessage(from, sticker, { sendMediaAsSticker: true });
+          // const sticker = MessageMedia.fromFilePath('./yeji.jpg');
+          // await client.sendMessage(from, sticker, { sendMediaAsSticker: true });
+          logger.info('sticker received');
           break;
         case 'location':
           // try Location property
+          logger.info('location received');
           let latitude = -7.2861445;
           let longitude = 112.6993123;
           let desc = 'Voza Tower Surabaya';
           let location = new Location(latitude, longitude, desc || "");
-          await client.sendMessage(from, location);
+          await message.reply(location);
           break;
-        case 'contact':
-          const vcard = 'BEGIN:VCARD\n' // metadata of the contact card
-            + 'VERSION:3.0\n' 
-            + 'FN:Rayhan Zs\n' // full name
-            + 'ORG:Indonesia;\n' // the organization of the contact
-            + 'TEL;type=CELL;type=VOICE;waid=6282133164875:+91 12345 67890\n' // WhatsApp ID + phone number
-            + 'END:VCARD'
-          client.sendMessage(from, {
-            contact: {
-              name: 'Rayhan Zs',
-              contacts: [{vcard}]
-            }
-          }
-          )
+        case 'vcard':
+          logger.info('vcard received');
+          // const vcard = 'BEGIN:VCARD\n' // metadata of the contact card
+          //   + 'VERSION:3.0\n' 
+          //   + 'FN:Rayhan Zs\n' // full name
+          //   + 'ORG:Indonesia;\n' // the organization of the contact
+          //   + 'TEL;type=CELL;type=VOICE;waid=6282133164875:+91 12345 67890\n' // WhatsApp ID + phone number
+          //   + 'END:VCARD'
+          // client.sendMessage(from, {
+          //   contact: {
+          //     name: 'Rayhan Zs',
+          //     contacts: [{vcard}]
+          //   }
+          // }
+          // )
           break;
         case 'REACTION':
           await client.sendMessage(from, 'Terima kasih atas reaksi Anda!');
           break;
         default:
           // Handle other message types or unknown types
-          await client.sendMessage(from, 'Kami akan segera kembali. Terima kasih!');
+          // await client.sendMessage(from, 'Kami akan segera kembali. Terima kasih!');
+          logger.info(`Message type ${type} is not supported.`);
           break;
       // if (type === 'chat') {
       //     if (body.toLowerCase() === 'hai') {
@@ -206,6 +174,7 @@ let initApp = (clientId) => {
       // }
       }  
     }
+    return type
   }
 
   client.initialize();
@@ -217,7 +186,6 @@ let initApp = (clientId) => {
   }
 }
 
-// initApp()
 
 app.use(bodyParser.json());
 app.use(bodyParser.urlencoded({ extended: true }));
@@ -229,9 +197,12 @@ app.get("/", (req, res) => {
 });
 
 app.get("/device", (req, res) => {
-  // use device query as parameter to create client session
-  // const number = req.body.device;
-  
+  res.sendFile(__dirname + "/core//device.html");
+});
+
+app.post("/device", (req, res) => {
+  const no = req.body.device;
+  res.redirect("/scan/" + no);
 });
   
 app.get("/scan/:id", async (req, res) => {
@@ -249,6 +220,76 @@ app.get("/scan/:id", async (req, res) => {
     }
   }
 }); 
+
+app.post("/send",
+  [
+    body("from").notEmpty(), //change from "number" to "from" matching to wwebjs property
+    body("message"),
+    body("to").notEmpty(),
+    body("type").notEmpty(),
+    body("urlni"),
+    body("filename")
+  ],
+  async (req, res) => {
+    const errors = validationResult(req).formatWith(({ message }) => {
+      return message;
+    });
+
+    if (!errors.isEmpty()) {
+      return res.status(422).json({
+        status: false,
+        message: errors.mapped(),
+      });
+    } else {
+      // let { from, to, type, message, urlni, filename } = req.body;
+      let messageDetails = req.body;
+
+      if (fs.existsSync(sessionPath.concat("session"))) {
+        try {
+          // console.log('File exists', number);
+          // let clientId = from
+          const client = activeSessions[messageDetails.from];
+          if (!client) {
+            return res.status(404).json({ error: 'Client not found' });
+          }
+          // con.gas(message, number, to, type, urlni, filename);
+          await messageHandler(client, messageDetails)
+          
+          res.writeHead(200, {
+            "Content-Type": "application/json",
+          });
+          res.end(
+            JSON.stringify({
+              status: true,
+              message: "success",
+            })
+          );
+        } catch (error) {
+          res.writeHead(401, {
+            "Content-Type": "application/json",
+          });
+          res.end(
+            JSON.stringify({
+              status: false,
+              message: error,
+            })
+          );
+        }
+      } else {
+        res.writeHead(401, {
+          "Content-Type": "application/json",
+        });
+        res.end(
+          JSON.stringify({
+            status: false,
+            message: "Please scan the QR before using the API",
+          })
+        );
+      }
+    }
+  }
+);
+
 
 // app.post("/device", (req, res) => {
 //   const number = req.body.device;
