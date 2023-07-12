@@ -1,0 +1,6 @@
+curl -X POST -H "Content-Type: application/json" -d '{
+    "number": "6281xxx",
+    "type": "chat",
+    "message": "try message 1",
+    "to": "628552xxx"
+    }' http://localhost:3000/send

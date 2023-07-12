@@ -7,15 +7,19 @@ const app = express();
 const server = http.createServer(app);
 const port = 3000;
 const qrcode = require('qrcode-terminal');
-const pino = require('pino');
 const fs = require('fs-extra');
 const rimraf = require("rimraf");
 
 const { body, validationResult } = require("express-validator");
 const { contextsKey } = require('express-validator/src/base');
-const logger = pino();
+const logger = require('./util/logger.js');
 const sessionPath = "sessions/";
 
+const { Client, LocalAuth, Location, MessageMedia, MessageTypes, Message } = require('whatsapp-web.js');
+
+
+// import messageHandler
+const messageHandler = require('./core/core.js');
 
 // const newUserAgent = 'Looyal EDGE/1.0'
 
@@ -24,7 +28,6 @@ let activeSessions = {}; // Menyimpan informasi sesi aktif
 
 let initApp = (clientId) => {
   try {
-    const { Client, LocalAuth, Location, MessageMedia, MessageTypes } = require('whatsapp-web.js');
 
   const client = new Client({
     authStrategy: new LocalAuth({
@@ -85,7 +88,7 @@ let initApp = (clientId) => {
   };
   
   const handleMessage = async (message) => {
-    const { from, type, body, to, hasQuotedMsg } = message;
+    const { from, type, body, to } = message;
     
     if (message != null && to != null){
       switch (type) {
@@ -243,8 +246,8 @@ app.post("/send",
     } else {
       // let { from, to, type, message, urlni, filename } = req.body;
       let messageDetails = req.body;
-
       if (fs.existsSync(sessionPath.concat("session"))) {
+        logger.info('Session exists')
         try {
           // console.log('File exists', number);
           // let clientId = from
@@ -252,6 +255,9 @@ app.post("/send",
           if (!client) {
             return res.status(404).json({ error: 'Client not found' });
           }
+          // const msg = new Message()
+          console.log(messageDetails)
+          logger.info('Client found, proceed to send message with messageHandler')
           // con.gas(message, number, to, type, urlni, filename);
           await messageHandler(client, messageDetails)
           
@@ -270,8 +276,8 @@ app.post("/send",
           });
           res.end(
             JSON.stringify({
-              status: false,
-              message: error,
+              message: "An error occurred",
+              error: error.message,
             })
           );
         }
