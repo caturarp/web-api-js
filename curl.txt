@@ -1,6 +1,2 @@
-curl -X POST -H "Content-Type: application/json" -d '{
-    "number": "6281xxx",
-    "type": "chat",
-    "message": "try message 1",
-    "to": "628552xxx"
-    }' http://localhost:3000/send
+curl -X POST -H "Content-Type: application/json" -d '{"from": "6285895090120", "type": "chat", "message": "try message 1", "to": "6282133164875"}' http://localhost:3000/send
+"Evaluation failed: Error: wid error: invalid wid\n    at e (https://web.whatsapp.com/:2:3883)\n    at new p (https://web.whatsapp.com/app.cab989f5c25dd08ddd99.js:89:264787)\n    at Object.d [as createWid] (https://web.whatsapp.com/app.cab989f5c25dd08ddd99.js:89:270650)\n    at __puppeteer_evaluation_script__:2:53"}

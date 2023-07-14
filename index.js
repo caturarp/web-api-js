@@ -7,9 +7,12 @@ const app = express();
 const server = http.createServer(app);
 const port = 3000;
 const qrcode = require('qrcode-terminal');
+const qrOption = require('qrcode');
 const fs = require('fs-extra');
 const rimraf = require("rimraf");
 
+const socketIO= require('socket.io')(server);
+const io = socketIO
 const { body, validationResult } = require("express-validator");
 const { contextsKey } = require('express-validator/src/base');
 const logger = require('./util/logger.js');
@@ -24,163 +27,187 @@ const messageHandler = require('./core/core.js');
 // const newUserAgent = 'Looyal EDGE/1.0'
 
 let activeSessions = {}; // Menyimpan informasi sesi aktif
-// const createClient = require('./app').createClient
-
+let currentQR = ""
 let initApp = (clientId) => {
   try {
-
-  const client = new Client({
-    authStrategy: new LocalAuth({
-        dataPath: sessionPath,
-        // clientId: clientId
-    })
-  })
-  
-  activeSessions[clientId] = client;
-  console.log(client)
-
-  client.on('authenticated', () => {
-      logger.info(`client ${clientId} authenticated!✅`)
-  })
-
-  client.on('qr', qr => {
-      qrcode.generate(qr, {small: true});
-  });
-  
-  client.on('ready', () => {
-      logger.info(`client ${clientId} ready!`)
-      console.log(sessionPath.concat(`session-${clientId}`))
-  });
-  
-  client.on('auth_failure', (msg) => {
-      logger.info(`client ${clientId} authentication failure: ${msg}`)
-      deleteSession(clientId);
-      client.initialize()
+    io.on('connection', (socket) => {
+      let clientId = socket.id;
+      const client = new Client({
+        authStrategy: new LocalAuth({
+            dataPath: sessionPath,
+            // clientId: clientId
+        })
+      })
       
-  });
-
-  client.on('message', async (msg, clientId) => {
-      let messageType = await handleMessage(msg, clientId)
-      logger.info(`${messageType} command successfully executed.`)
-  });
-
-  client.on('disconnected', async (reason) => {
-    logger.info(`client ${clientId} disconnected: ${reason}`);
-    delete activeSessions[clientId]; // Remove the session from sessions object
-    // await client.destroy();
-    deleteSession();
-    // client.initialize();
-  }); 
-
-  const deleteSession = () => {
-    const sessionDirectory = sessionPath;
+      activeSessions[clientId] = client;
+      console.log(client)
   
-    if (fs.existsSync(sessionDirectory)) {
-      try {
-        rimraf.sync(sessionDirectory, { force: true });
-        logger.info(`Session directory deleted: ${sessionDirectory}`);
-      } catch (error) {
-        logger.error(`Error deleting session directory: ${error}`);
-      }
-    } else {
-      logger.info(`Session directory does not exist: ${sessionDirectory}`);
-    }
-  };
+      client.on('authenticated', () => {
+          logger.info(`client ${clientId} authenticated!✅`)
+          socket.emit('authenticated', {clientId: clientId})
+      })
   
-  const handleMessage = async (message) => {
-    const { from, type, body, to } = message;
+      client.on('qr', async(qr) => {
+          qrcode.generate(qr, {small: true});
+          // // currentQR = qr
+          // socket.emit('qr', qr); 
+          // const { connection, qr } = update;
+          if (qr) {
+            qrOption.toDataURL(qr, (err, url) => {
+              if (err) {
+                console.error("Error generating QR code:", err);
+                // Kirim pesan ke klien bahwa terjadi kesalahan dalam pembuatan QR code
+                socket.emit("message", "Error generating QR code. Please try again.");
+              } else {
+                socket.emit("qr", url);
+                socket.emit("message", "QR Code received, please scan!");
+              }
+            });
+          }
+          else {
+            socket.emit("message", "no qr code found");
+          }
+      });
+      
+      client.on('ready', () => {
+          logger.info(`client ${clientId} ready!`)
+          console.log(sessionPath.concat(`session-${clientId}`))
+          socket.emit('ready', {clientId: clientId})
+      });
+      
+      client.on('auth_failure', (msg) => {
+          logger.info(`client ${clientId} authentication failure: ${msg}`)
+          deleteSession(clientId);
+          socket.emit('auth_failure');
+          client.initialize()
+      });
+  
+      client.on('message', async (msg, clientId) => {
+          let messageType = await handleMessage(msg, clientId)
+          logger.info(`${messageType} command successfully executed.`)
+          socket.emit('message', msg);
+      });
+  
+      client.on('disconnected', async (reason) => {
+        logger.info(`client ${clientId} disconnected: ${reason}`);
+        delete activeSessions[clientId]; // Remove the session from sessions object
+        // await client.destroy();
+        deleteSession();
+        socket.emit('disconnected', reason);
+        // client.initialize();
+      });
+      client.initialize();
+    });
+     
+
+    const deleteSession = () => {
+      const sessionDirectory = sessionPath;
     
-    if (message != null && to != null){
-      switch (type) {
-        case 'chat':
-          if (body.toLowerCase() === 'hai') {
-            await client.sendMessage(from, 'Hi!');
-          }
-          break;
-        case 'image':
-          // try hasMedia property
-          if(message.hasMedia && message.body === '!tostiker') {
-            // create sticker from received image
-            logger.info(` received image, converting to sticker...`);
-            // const quotedMsg = await message.getQuotedMessage();
-            const mediaData = await message.downloadMedia();
-            logger.info(`${mediaData}}`);
-            client.sendMessage(from, mediaData, { sendMediaAsSticker: true });
-          }
-          else if (message.hasMedia && message.body === '!image') {
-            // send back received image and say thanks
-            const media = await message.downloadMedia();
-            await client.sendMessage(from, media, { caption: 'Terima kasih atas gambar yang Anda kirim!'});
-          }
-          break;
-        case 'audio':
-          logger.info('audio received')
-          // await client.sendMessage(from, 'Terima kasih atas audio yang Anda kirim! Saya akan mendengarkannya.');
-          break;
-        case 'ptt': // voice
-          logger.info('voice received')
-          // await client.sendMessage(from, 'Terima kasih atas suara yang Anda kirim! Saya akan mendengarkan pesan suara Anda.');
-          break;
-        case 'video':
-          logger.info('video received')
-          // await client.sendMessage(from, 'Terima kasih atas video yang Anda kirim! Saya akan menontonnya.');
-          break;
-        case 'document':
-          logger.info('document received')
-          // await client.sendMessage(from, 'Terima kasih atas dokumen yang Anda kirim! Saya akan membacanya.');
-          break;
-        case 'sticker':
-          // try MessageMedia property
-          // const sticker = MessageMedia.fromFilePath('./yeji.jpg');
-          // await client.sendMessage(from, sticker, { sendMediaAsSticker: true });
-          logger.info('sticker received');
-          break;
-        case 'location':
-          // try Location property
-          logger.info('location received');
-          let latitude = -7.2861445;
-          let longitude = 112.6993123;
-          let desc = 'Voza Tower Surabaya';
-          let location = new Location(latitude, longitude, desc || "");
-          await message.reply(location);
-          break;
-        case 'vcard':
-          logger.info('vcard received');
-          // const vcard = 'BEGIN:VCARD\n' // metadata of the contact card
-          //   + 'VERSION:3.0\n' 
-          //   + 'FN:Rayhan Zs\n' // full name
-          //   + 'ORG:Indonesia;\n' // the organization of the contact
-          //   + 'TEL;type=CELL;type=VOICE;waid=6282133164875:+91 12345 67890\n' // WhatsApp ID + phone number
-          //   + 'END:VCARD'
-          // client.sendMessage(from, {
-          //   contact: {
-          //     name: 'Rayhan Zs',
-          //     contacts: [{vcard}]
-          //   }
-          // }
-          // )
-          break;
-        case 'REACTION':
-          await client.sendMessage(from, 'Terima kasih atas reaksi Anda!');
-          break;
-        default:
-          // Handle other message types or unknown types
-          // await client.sendMessage(from, 'Kami akan segera kembali. Terima kasih!');
-          logger.info(`Message type ${type} is not supported.`);
-          break;
-      // if (type === 'chat') {
-      //     if (body.toLowerCase() === 'hai') {
-      //       await client.sendMessage(from, 'Hi!');
-      //     }
-      // } else if (message.type === 'image') {
-      //     await message.reply('Terima kasih atas gambar yang dikirim!');
-      // }
-      }  
+      if (fs.existsSync(sessionDirectory)) {
+        try {
+          rimraf.sync(sessionDirectory, { force: true });
+          logger.info(`Session directory deleted: ${sessionDirectory}`);
+        } catch (error) {
+          logger.error(`Error deleting session directory: ${error}`);
+        }
+      } else {
+        logger.info(`Session directory does not exist: ${sessionDirectory}`);
+      }
+    };
+    
+    const handleMessage = async (message) => {
+      const { from, type, body, to } = message;
+      
+      if (message != null && to != null){
+        switch (type) {
+          case 'chat':
+            if (body.toLowerCase() === 'hai') {
+              await client.sendMessage(from, 'Hi!');
+            }
+            break;
+          case 'image':
+            // try hasMedia property
+            if(message.hasMedia && message.body === '!tostiker') {
+              // create sticker from received image
+              logger.info(` received image, converting to sticker...`);
+              // const quotedMsg = await message.getQuotedMessage();
+              const mediaData = await message.downloadMedia();
+              logger.info(`${mediaData}}`);
+              client.sendMessage(from, mediaData, { sendMediaAsSticker: true });
+            }
+            else if (message.hasMedia && message.body === '!image') {
+              // send back received image and say thanks
+              const media = await message.downloadMedia();
+              await client.sendMessage(from, media, { caption: 'Terima kasih atas gambar yang Anda kirim!'});
+            }
+            break;
+          case 'audio':
+            logger.info('audio received')
+            // await client.sendMessage(from, 'Terima kasih atas audio yang Anda kirim! Saya akan mendengarkannya.');
+            break;
+          case 'ptt': // voice
+            logger.info('voice received')
+            // await client.sendMessage(from, 'Terima kasih atas suara yang Anda kirim! Saya akan mendengarkan pesan suara Anda.');
+            break;
+          case 'video':
+            logger.info('video received')
+            // await client.sendMessage(from, 'Terima kasih atas video yang Anda kirim! Saya akan menontonnya.');
+            break;
+          case 'document':
+            logger.info('document received')
+            // await client.sendMessage(from, 'Terima kasih atas dokumen yang Anda kirim! Saya akan membacanya.');
+            break;
+          case 'sticker':
+            // try MessageMedia property
+            // const sticker = MessageMedia.fromFilePath('./yeji.jpg');
+            // await client.sendMessage(from, sticker, { sendMediaAsSticker: true });
+            logger.info('sticker received');
+            break;
+          case 'location':
+            // try Location property
+            logger.info('location received');
+            let latitude = -7.2861445;
+            let longitude = 112.6993123;
+            let desc = 'Voza Tower Surabaya';
+            let location = new Location(latitude, longitude, desc || "");
+            await message.reply(location);
+            break;
+          case 'vcard':
+            logger.info('vcard received');
+            // const vcard = 'BEGIN:VCARD\n' // metadata of the contact card
+            //   + 'VERSION:3.0\n' 
+            //   + 'FN:Rayhan Zs\n' // full name
+            //   + 'ORG:Indonesia;\n' // the organization of the contact
+            //   + 'TEL;type=CELL;type=VOICE;waid=6282133164875:+91 12345 67890\n' // WhatsApp ID + phone number
+            //   + 'END:VCARD'
+            // client.sendMessage(from, {
+            //   contact: {
+            //     name: 'Rayhan Zs',
+            //     contacts: [{vcard}]
+            //   }
+            // }
+            // )
+            break;
+          case 'REACTION':
+            await client.sendMessage(from, 'Terima kasih atas reaksi Anda!');
+            break;
+          default:
+            // Handle other message types or unknown types
+            // await client.sendMessage(from, 'Kami akan segera kembali. Terima kasih!');
+            logger.info(`Message type ${type} is not supported.`);
+            break;
+        // if (type === 'chat') {
+        //     if (body.toLowerCase() === 'hai') {
+        //       await client.sendMessage(from, 'Hi!');
+        //     }
+        // } else if (message.type === 'image') {
+        //     await message.reply('Terima kasih atas gambar yang dikirim!');
+        // }
+        }  
+      }
+      return type
     }
-    return type
-  }
 
-  client.initialize();
   } catch (error) {
     fs.emptyDir(sessionPath); // Remove all files and subdirectories
     fs.remove(sessionPath); // Remove the empty directory
@@ -200,7 +227,7 @@ app.get("/", (req, res) => {
 });
 
 app.get("/device", (req, res) => {
-  res.sendFile(__dirname + "/core//device.html");
+  res.sendFile(__dirname + "/core/device.html");
 });
 
 app.post("/device", (req, res) => {
@@ -212,7 +239,8 @@ app.get("/scan/:id", async (req, res) => {
   const clientId = req.params.id;
   try {
     initApp(clientId);
-    res.status(200).send("sucsxcess");
+    // res.send(currentQR).Status(200)
+    res.sendFile(__dirname + "/core//index.html");
   } catch (error) {
     if (error instanceof AuthenticationError) {
       logger.info(`client ${clientId} authentication failure: ${error.message}`);

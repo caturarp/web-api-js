@@ -41,14 +41,23 @@
 
         var socket = io();
             
-        socket.emit('StartConnection',lastSegment);
-        socket.on('message', function (msg) {
-            $('.logs').append($('<li>').text(msg));
+        // socket.emit('at',lastSegment);
+        socket.on('connect', function () {
+            console.log('Connected to server');
+            // socket.emit('initApp');
         });
+
+        // socket.emit('StartConnection',lastSegment);
+        // socket.on('message', function (msg) {
+        //     $('.logs').append($('<li>').text(msg));
+        // });
 
         socket.on('qr', function (src) {
             $('#qrcode').attr('src', src);
             $('#qrcode').show();
+        });
+        socket.on('authenticated', function () {
+            console.log('Client authenticated');
         });
 
         socket.on('ready', function (data) {
