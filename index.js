@@ -18,7 +18,13 @@ const { contextsKey } = require('express-validator/src/base');
 const logger = require('./util/logger.js');
 const sessionPath = "sessions/";
 
-const { Client, LocalAuth, Location, MessageMedia, MessageTypes, Message } = require('whatsapp-web.js');
+const { Client,
+  LocalAuth,
+  Location,
+  MessageMedia,
+  MessageTypes,
+  Message,
+  Contact } = require('whatsapp-web.js');
 
 
 // import messageHandler
@@ -31,7 +37,7 @@ let currentQR = ""
 let initApp = (clientId) => {
   try {
     io.on('connection', (socket) => {
-      let clientId = socket.id;
+      // let clientId = socket.id;
       const client = new Client({
         authStrategy: new LocalAuth({
             dataPath: sessionPath,
@@ -229,6 +235,47 @@ app.get("/", (req, res) => {
 app.get("/device", (req, res) => {
   res.sendFile(__dirname + "/core/device.html");
 });
+
+// check if Whatsapp number exist
+app.get("/whatscheck", async (req, res) =>{
+  let device = req.query.device
+  let number = req.query.number
+  const client = activeSessions[device];
+  if (!client) {
+    return res.status(404).json({ error: 'Client not found' });
+  }
+  try { 
+    let contact = await client.getContactById(`${number}@c.us`)
+    if (!contact){
+      return res.status(404).json({ error: 'contact not found' });
+    }
+    let isContact = contact.isWAContact
+    // logger.info(contact, isContact)
+    if (!isContact){
+      return res.status(404).json({ error: `number not found, ${isContact}` });
+    }
+    res.writeHead(200, {
+      "Content-Type": "application/json",
+    });
+    res.end(
+      JSON.stringify({
+        status: true,
+        message: "success",
+      })
+    );
+  } catch (error) {
+    res.writeHead(401, {
+      "Content-Type": "application/json",
+    });
+    res.end(
+      JSON.stringify({
+        message: "An error occurred",
+        error: error.message,
+      })
+    );
+  }
+})
+
 
 app.post("/device", (req, res) => {
   const no = req.body.device;
