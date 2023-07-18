@@ -105,6 +105,9 @@ let initApp = (clientId) => {
       client.initialize();
     });
      
+    const saveMessage = async (message) => {
+    
+    }
 
     const deleteSession = () => {
       const sessionDirectory = sessionPath;
@@ -250,7 +253,7 @@ app.get("/whatscheck", async (req, res) =>{
       return res.status(404).json({ error: 'contact not found' });
     }
     let isContact = contact.isWAContact
-    // logger.info(contact, isContact)
+    logger.info(contact, isContact)
     if (!isContact){
       return res.status(404).json({ error: `number not found, ${isContact}` });
     }
@@ -276,6 +279,7 @@ app.get("/whatscheck", async (req, res) =>{
   }
 })
 
+// check if  
 
 app.post("/device", (req, res) => {
   const no = req.body.device;
