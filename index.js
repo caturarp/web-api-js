@@ -78,20 +78,24 @@ let initApp = (clientId) => {
       client.on('ready', () => {
           logger.info(`client ${clientId} ready!`)
           console.log(sessionPath.concat(`session-${clientId}`))
-          socket.emit('ready', {clientId: clientId})
+          // socket.emit('ready', {clientId: clientId})
       });
       
       client.on('auth_failure', (msg) => {
           logger.info(`client ${clientId} authentication failure: ${msg}`)
           deleteSession(clientId);
-          socket.emit('auth_failure');
+          // socket.emit('auth_failure');
           client.initialize()
       });
   
       client.on('message', async (msg, clientId) => {
           let messageType = await handleMessage(msg, clientId)
-          logger.info(`${messageType} command successfully executed.`)
-          socket.emit('message', msg);
+          logger.info(`${messageType} command successfully received.`)
+          let uploadedMessage = await saveMessage(msg, clientId)
+          if(uploadedMessage){
+            logger.info(`Message successfully saved to database.`)
+          }
+          // socket.emit('message', msg);
       });
   
       client.on('disconnected', async (reason) => {
@@ -105,8 +109,46 @@ let initApp = (clientId) => {
       client.initialize();
     });
      
-    const saveMessage = async (message) => {
-    
+    const saveMessage = async (message, clientId) => {
+      // const message = m.messages[0];
+
+      // Extracting details from the message object
+      const idChat = message.id.id;
+      const fromMe = message.id.fromMe;
+      const numberSender = message.id.remote.split('@')[0];
+      const group = message.participant;
+      const numberReceiver = clientId;
+      const body = message.body;
+      const type = message.type;
+      // const timestamp = message.timestamp;
+      // const from = message.from;
+      // const to = message.to;
+      // const hasQuotedMsg = message.hasQuotedMsg;
+      // const mentionedIds = message.mentionedIds; 
+
+      try {
+        let conversation = body
+        if (conversation == null || type == undefined){
+          logger.info(`Message is not a text message, skip saving...`)
+          return
+        }
+        if (group == true){
+          conversation = `${numberSender} (group): ${body}`
+          logger.info(`Message is from group, skip saving...`, conversation)
+          return
+        }
+        const payload = {
+          chatNumberSender: numberSender,
+          chatNumberReceiver: numberReceiver,
+          chatMessageId: idChat,
+          chatMessageBody: conversation,
+          chatIsFromMe: fromMe
+        };
+        return payload
+      } catch (error) {
+        logger.error(`Error saving message: ${error.message}`)
+      }
+      return
     }
 
     const deleteSession = () => {
@@ -212,7 +254,8 @@ let initApp = (clientId) => {
         // } else if (message.type === 'image') {
         //     await message.reply('Terima kasih atas gambar yang dikirim!');
         // }
-        }  
+        }
+        logger.info('Message sent!');
       }
       return type
     }
