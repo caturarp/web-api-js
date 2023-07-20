@@ -24,16 +24,19 @@ const { Client,
   MessageMedia,
   MessageTypes,
   Message,
-  Contact } = require('whatsapp-web.js');
+  Contact,
+  Chat } = require('whatsapp-web.js');
 
 
-// import messageHandler
-const messageHandler = require('./core/core.js');
+// import Handler
+const messageSender = require('./core/core.js');
+const messageFinder = require('./messageFinder.js');
 
 // const newUserAgent = 'Looyal EDGE/1.0'
 
 let activeSessions = {}; // Menyimpan informasi sesi aktif
-let currentQR = ""
+const chatIdMap = new Map();
+
 let initApp = (clientId) => {
   try {
     io.on('connection', (socket) => {
@@ -89,14 +92,31 @@ let initApp = (clientId) => {
       });
   
       client.on('message', async (msg, clientId) => {
-          let messageType = await handleMessage(msg, clientId)
-          logger.info(`${messageType} command successfully received.`)
-          let uploadedMessage = await saveMessage(msg, clientId)
-          if(uploadedMessage){
-            logger.info(`Message successfully saved to database.`)
-          }
-          // socket.emit('message', msg);
+        // handle message to specific action according to type
+        let messageType = await messageHandler(msg, clientId)
+        logger.info(`${messageType} command successfully received.`)
+
+        // save message to database
+        const uploadedMessage = await saveMessage(msg, clientId)
+        if(uploadedMessage){
+          console.log(uploadedMessage.chatMessageBody)
+          logger.info(`Message successfully saved to database.`)
+        }
+          // socket.emit('message', msg);  
       });
+
+      // on message_create
+      client.on('message_create', async (msg, clientId) => {
+        if (!msg) {
+          logger.error(`Message is empty, skip saving...`)
+        }  
+        // save message to database
+        const uploadedMessage = await saveMessage(msg, clientId)
+        if(uploadedMessage){
+          console.log(uploadedMessage.chatMessageBody)
+          logger.info(`Message successfully saved to database.`)
+        }
+      })
   
       client.on('disconnected', async (reason) => {
         logger.info(`client ${clientId} disconnected: ${reason}`);
@@ -111,12 +131,12 @@ let initApp = (clientId) => {
      
     const saveMessage = async (message, clientId) => {
       // const message = m.messages[0];
-
+      // console.log(message)
       // Extracting details from the message object
-      const idChat = message.id.id;
+      const messageId = message.id.id;
       const fromMe = message.id.fromMe;
       const numberSender = message.id.remote.split('@')[0];
-      const group = message.participant;
+      const group = message.author; // undefined if personal chat
       const numberReceiver = clientId;
       const body = message.body;
       const type = message.type;
@@ -125,14 +145,14 @@ let initApp = (clientId) => {
       // const to = message.to;
       // const hasQuotedMsg = message.hasQuotedMsg;
       // const mentionedIds = message.mentionedIds; 
-
+      console.log(messageId, body)
       try {
         let conversation = body
         if (conversation == null || type == undefined){
           logger.info(`Message is not a text message, skip saving...`)
           return
         }
-        if (group == true){
+        if (group == undefined){
           conversation = `${numberSender} (group): ${body}`
           logger.info(`Message is from group, skip saving...`, conversation)
           return
@@ -140,11 +160,13 @@ let initApp = (clientId) => {
         const payload = {
           chatNumberSender: numberSender,
           chatNumberReceiver: numberReceiver,
-          chatMessageId: idChat,
+          chatMessageId: messageId,
           chatMessageBody: conversation,
           chatIsFromMe: fromMe
         };
         return payload
+        // post method here
+        // const response = await axios.post();
       } catch (error) {
         logger.error(`Error saving message: ${error.message}`)
       }
@@ -166,7 +188,7 @@ let initApp = (clientId) => {
       }
     };
     
-    const handleMessage = async (message) => {
+    const messageHandler = async (message) => {
       const { from, type, body, to } = message;
       
       if (message != null && to != null){
@@ -255,7 +277,7 @@ let initApp = (clientId) => {
         //     await message.reply('Terima kasih atas gambar yang dikirim!');
         // }
         }
-        logger.info('Message sent!');
+        // logger.info('Message sent!');
       }
       return type
     }
@@ -281,6 +303,34 @@ app.get("/", (req, res) => {
 app.get("/device", (req, res) => {
   res.sendFile(__dirname + "/core/device.html");
 });
+
+app.get("/unsend", async (req, res) => {
+  let device = req.query.device
+  let number = req.query.number
+  let chatId = req.query.chatId
+  let messageId = req.query.messageId
+
+  const client = activeSessions[device];
+  
+  if (!device) return res.send('Input Parameter Device');
+  if (!number) return res.send('Input Parameter Number Parameter');
+  if (!/^\d+$/.test(number)) return res.send('Invalid Number');
+  if (!chatId) return res.send('Input Parameter chatId Parameter');
+  if (!messageId) return res.send('Input Parameter messageId Parameter');
+  
+  if (!client) {
+    return res.status(404).json({ error: 'Client not found' });
+  }
+  try {
+    const message = await messageFinder(client, chatId, messageId)
+    if(!message) return res.send('Message not found')
+    await message.delete(true)
+    return res.send('Message deleted')
+  } catch (error) {
+    logger.error(error)
+  }
+
+})
 
 // check if Whatsapp number exist
 app.get("/whatscheck", async (req, res) =>{
@@ -378,10 +428,10 @@ app.post("/send",
             return res.status(404).json({ error: 'Client not found' });
           }
           // const msg = new Message()
-          console.log(messageDetails)
-          logger.info('Client found, proceed to send message with messageHandler')
+          logger.info('Client found, proceed to send message with messageSender')
           // con.gas(message, number, to, type, urlni, filename);
-          await messageHandler(client, messageDetails)
+          const sentMessageDetails = await messageSender(client, messageDetails)
+          console.log(sentMessageDetails)
           
           res.writeHead(200, {
             "Content-Type": "application/json",
