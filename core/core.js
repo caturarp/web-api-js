@@ -16,5 +16,29 @@ const messageSender = async (client, messageDetails) => {
   }
 
 }
-// export messageSender that will be used in index.js
-module.exports = messageSender;
+
+const messageFinder = async (client, chatId, messageId) => {
+  const messages = await messageFetcher(client, chatId)
+  const message = messages.find(msg => msg.id.id === messageId)
+  if (!message || message === undefined) {
+      throw new NotFoundError(`Message ${messageId} not found`);
+  }
+  return message
+}
+
+const messageFetcher = async (client, chatId, limit) => {
+  const chat = await client.getChatById(chatId).catch(() => {
+      throw new NotFoundError(`Chat ${chatId} not found`);
+  })
+  // Use a conditional statement to handle the 'limit' argument
+  const messages = limit
+      ? await chat.fetchMessages({ limit: limit }).catch(() => {
+          throw new NotFoundError(`Messages not found`);
+      })
+      : await chat.fetchMessages().catch(() => {
+          throw new NotFoundError(`Messages not found`);
+      });
+  return messages
+}
+// export messageHandler that will be used in index.js
+module.exports = { messageFinder, messageFetcher, messageSender};

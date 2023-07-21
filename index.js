@@ -28,9 +28,9 @@ const { Client,
   Chat } = require('whatsapp-web.js');
 
 
-// import Handler
-const messageSender = require('./core/core.js');
-const messageFinder = require('./messageFinder.js');
+// import modules from core.js
+const { messageFinder, messageFetcher, messageSender } = require('./core/core.js');
+
 
 // const newUserAgent = 'Looyal EDGE/1.0'
 
@@ -304,97 +304,10 @@ app.get("/device", (req, res) => {
   res.sendFile(__dirname + "/core/device.html");
 });
 
-app.get("/unsend", async (req, res) => {
-  let device = req.query.device
-  let number = req.query.number
-  let chatId = req.query.chatId
-  let messageId = req.query.messageId
-
-  const client = activeSessions[device];
-  
-  if (!device) return res.send('Input Parameter Device');
-  if (!number) return res.send('Input Parameter Number Parameter');
-  if (!/^\d+$/.test(number)) return res.send('Invalid Number');
-  if (!chatId) return res.send('Input Parameter chatId Parameter');
-  if (!messageId) return res.send('Input Parameter messageId Parameter');
-  
-  if (!client) {
-    return res.status(404).json({ error: 'Client not found' });
-  }
-  try {
-    const message = await messageFinder(client, chatId, messageId)
-    if(!message) return res.send('Message not found')
-    await message.delete(true)
-    return res.send('Message deleted')
-  } catch (error) {
-    logger.error(error)
-  }
-
-})
-
-// check if Whatsapp number exist
-app.get("/whatscheck", async (req, res) =>{
-  let device = req.query.device
-  let number = req.query.number
-  const client = activeSessions[device];
-  if (!client) {
-    return res.status(404).json({ error: 'Client not found' });
-  }
-  try { 
-    let contact = await client.getContactById(`${number}@c.us`)
-    if (!contact){
-      return res.status(404).json({ error: 'contact not found' });
-    }
-    let isContact = contact.isWAContact
-    logger.info(contact, isContact)
-    if (!isContact){
-      return res.status(404).json({ error: `number not found, ${isContact}` });
-    }
-    res.writeHead(200, {
-      "Content-Type": "application/json",
-    });
-    res.end(
-      JSON.stringify({
-        status: true,
-        message: "success",
-      })
-    );
-  } catch (error) {
-    res.writeHead(401, {
-      "Content-Type": "application/json",
-    });
-    res.end(
-      JSON.stringify({
-        message: "An error occurred",
-        error: error.message,
-      })
-    );
-  }
-})
-
-// check if  
-
 app.post("/device", (req, res) => {
   const no = req.body.device;
   res.redirect("/scan/" + no);
 });
-  
-app.get("/scan/:id", async (req, res) => {
-  const clientId = req.params.id;
-  try {
-    initApp(clientId);
-    // res.send(currentQR).Status(200)
-    res.sendFile(__dirname + "/core//index.html");
-  } catch (error) {
-    if (error instanceof AuthenticationError) {
-      logger.info(`client ${clientId} authentication failure: ${error.message}`);
-      res.sendStatus(401); // Send 401 Unauthorized status code
-    } else {
-      // Handle other errors
-      res.sendStatus(500); // Send 500 Internal Server Error status code or handle it differently
-    }
-  }
-}); 
 
 app.post("/send",
   [
@@ -468,11 +381,118 @@ app.post("/send",
   }
 );
 
+app.get("/unsend", async (req, res) => {
+  let device = req.query.device
+  let number = req.query.number
+  let chatId = req.query.chatId
+  let messageId = req.query.messageId
 
-// app.post("/device", (req, res) => {
-//   const number = req.body.device;
-//   res.redirect("/scan/" + number);
-// });
+  const client = activeSessions[device];
+  
+  if (!device) return res.send('Input Parameter Device');
+  if (!number) return res.send('Input Parameter Number Parameter');
+  if (!/^\d+$/.test(number)) return res.send('Invalid Number');
+  if (!chatId) return res.send('Input Parameter chatId Parameter');
+  if (!messageId) return res.send('Input Parameter messageId Parameter');
+  
+  if (!client) {
+    return res.status(404).json({ error: 'Client not found' });
+  }
+  try {
+    const message = await messageFinder(client, chatId, messageId)
+    if(!message) return res.send('Message not found')
+    await message.delete(true)
+    return res.send('Message deleted')
+  } catch (error) {
+    logger.error(error)
+  }
+
+})
+
+app.get("/getchat", async (req, res) => {
+  let device = req.query.device
+  let number = req.query.number
+  let chatId = req.query.chatId
+  let limit = parseInt(req.query.limit) // Convert the 'limit' parameter to an integer
+
+  const client = activeSessions[device];
+
+  if (!device) return res.send('Input Parameter Device');
+  if (!number) return res.send('Input Parameter Number Parameter');
+  if (!/^\d+$/.test(number)) return res.send('Invalid Number');
+  if (!chatId) return res.send('Input Parameter chatId Parameter');
+
+  if (!client) {
+    return res.status(404).json({ error: 'Client not found' });
+  }
+  try {
+    const messages = await messageFetcher(client, chatId, limit)
+    if(!messages) return res.send('Message not found')
+    // console.log(messages)
+    // map messages to get message.body only
+    messageBodies = messages.map((message) => message.body)
+    return res.send(messageBodies)
+  } catch (error) {
+    logger.error(error)
+  }
+})
+
+// check if Whatsapp number exist
+app.get("/whatscheck", async (req, res) =>{
+  let device = req.query.device
+  let number = req.query.number
+  const client = activeSessions[device];
+  if (!client) {
+    return res.status(404).json({ error: 'Client not found' });
+  }
+  try { 
+    let contact = await client.getContactById(`${number}@c.us`)
+    if (!contact){
+      return res.status(404).json({ error: 'contact not found' });
+    }
+    let isContact = contact.isWAContact
+    logger.info(contact, isContact)
+    if (!isContact){
+      return res.status(404).json({ error: `number not found, ${isContact}` });
+    }
+    res.writeHead(200, {
+      "Content-Type": "application/json",
+    });
+    res.end(
+      JSON.stringify({
+        status: true,
+        message: "success",
+      })
+    );
+  } catch (error) {
+    res.writeHead(401, {
+      "Content-Type": "application/json",
+    });
+    res.end(
+      JSON.stringify({
+        message: "An error occurred",
+        error: error.message,
+      })
+    );
+  }
+})
+
+app.get("/scan/:id", async (req, res) => {
+  const clientId = req.params.id;
+  try {
+    initApp(clientId);
+    // res.send(currentQR).Status(200)
+    res.sendFile(__dirname + "/core//index.html");
+  } catch (error) {
+    if (error instanceof AuthenticationError) {
+      logger.info(`client ${clientId} authentication failure: ${error.message}`);
+      res.sendStatus(401); // Send 401 Unauthorized status code
+    } else {
+      // Handle other errors
+      res.sendStatus(500); // Send 500 Internal Server Error status code or handle it differently
+    }
+  }
+}); 
 
 // start the express server
 server.listen(port, function () {
