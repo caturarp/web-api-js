@@ -5,11 +5,14 @@ const express = require('express');
 
 const app = express();
 const server = http.createServer(app);
-const port = 3000;
 const qrcode = require('qrcode-terminal');
 const qrOption = require('qrcode');
 const fs = require('fs-extra');
 const rimraf = require("rimraf");
+require('dotenv').config();
+const config = require('./config');
+const port = config.port;
+
 
 const socketIO= require('socket.io')(server);
 const io = socketIO
