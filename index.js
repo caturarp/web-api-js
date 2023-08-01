@@ -56,107 +56,113 @@ const pool = new Pool({
     port: 7887, // Replace with your PostgreSQL port if different
 });
 
-let initApp = (clientId) => {
-    try {
-        io.on("connection", (socket) => {
-            // let clientId = socket.id;
-            const client = new Client({
-                authStrategy: new LocalAuth({
-                    dataPath: sessionPath,
-                    clientId: clientId,
-                }),
-            });
-
-            activeSessions[clientId] = client;
-            // console.log(client)
-
-            client.on("authenticated", () => {
-                logger.info(`client ${clientId} authenticated!✅`);
-                socket.emit("authenticated", { clientId: clientId });
-            });
-
-            client.on("qr", async (qr) => {
-                qrcode.generate(qr, { small: true });
-                if (qr) {
-                    qrOption.toDataURL(qr, (err, url) => {
-                        if (err) {
-                            console.error("Error generating QR code:", err);
-                            // Kirim pesan ke klien bahwa terjadi kesalahan dalam pembuatan QR code
-                            socket.emit(
-                                "message",
-                                "Error generating QR code. Please try again."
-                            );
-                        } else {
-                            socket.emit("qr", url);
-                            socket.emit(
-                                "message",
-                                "QR Code received, please scan!"
-                            );
-                        }
-                    });
-                } else {
-                    socket.emit("message", "no qr code found");
-                }
-            });
-
-            client.on("ready", () => {
-                logger.info(`client ${clientId} ready!`);
-                console.log(sessionPath.concat(`session-${clientId}`));
-                // socket.emit('ready', {clientId: clientId})
-            });
-
-            client.on("auth_failure", (msg) => {
-                logger.info(
-                    `client ${clientId} authentication failure: ${msg}`
-                );
-                deleteSession(clientId);
-                // socket.emit('auth_failure');
+const initApp = async (clientId) => {
+    return new Promise((resolve, reject) =>{
+        try {
+            io.on("connection", async (socket) => {
+                // let clientId = socket.id;
+                const client = new Client({
+                    authStrategy: new LocalAuth({
+                        dataPath: sessionPath,
+                        clientId: clientId,
+                    }),
+                });
+    
+                activeSessions[clientId] = client;
+                // console.log(client)
                 client.initialize();
+    
+                client.on("authenticated", () => {
+                    logger.info(`client ${clientId} authenticated!✅`);
+                    socket.emit("authenticated", { clientId: clientId });
+                });
+    
+                client.on("qr", async (qr) => {
+                    qrcode.generate(qr, { small: true });
+                    if (qr) {
+                        qrOption.toDataURL(qr, (err, url) => {
+                            if (err) {
+                                console.error("Error generating QR code:", err);
+                                // Kirim pesan ke klien bahwa terjadi kesalahan dalam pembuatan QR code
+                                socket.emit(
+                                    "message",
+                                    "Error generating QR code. Please try again."
+                                );
+                            } else {
+                                socket.emit("qr", url);
+                                socket.emit(
+                                    "message",
+                                    "QR Code received, please scan!"
+                                );
+                            }
+                        });
+                    } else {
+                        socket.emit("message", "no qr code found");
+                    }
+                });
+    
+                client.on("ready", () => {
+                    logger.info(`client ${clientId} ready!`);
+                    console.log(sessionPath.concat(`session-${clientId}`));
+                    // socket.emit('ready', {clientId: clientId})
+                });
+    
+                client.on("auth_failure", (msg) => {
+                    logger.info(
+                        `client ${clientId} authentication failure: ${msg}`
+                    );
+                    deleteSession(clientId);
+                    // socket.emit('auth_failure');
+                    reject(new Error("Authentication failure"));
+                });
+    
+                client.on("message", async (msg, clientId) => {
+                    // handle message to specific action according to type
+                    let messageType = await messageHandler(client, msg);
+                    logger.info(`${messageType} command successfully received.`);
+    
+                    // save message to database
+                    const uploadedMessage = await saveMessage(msg, clientId);
+                    if (uploadedMessage) {
+                        console.log(uploadedMessage.chatMessageBody);
+                        logger.info(`Message successfully saved to database.`);
+                    }
+                    // socket.emit('message', msg);
+                });
+    
+                // on message_create
+                client.on("message_create", async (msg, clientId) => {
+                    if (!msg) {
+                        logger.error(`Message is empty, skip saving...`);
+                    }
+                    // save message to database
+                    const uploadedMessage = await saveMessage(msg, clientId);
+                    if (uploadedMessage) {
+                        console.log(uploadedMessage.chatMessageBody);
+                        logger.info(`Message successfully saved to database.`);
+                    }
+                });
+    
+                client.on("disconnected", async (reason) => {
+                    logger.info(`client ${clientId} disconnected: ${reason}`);
+                    delete activeSessions[clientId]; // Remove the session from sessions object
+                    // await client.destroy();
+                    deleteSession();
+                    socket.emit("disconnected", reason);
+                    // client.initialize();
+                });
+                
+                const clientIds = Object.keys(activeSessions);
+                logger.info("active sessions: " + clientIds);  
+                resolve(client); 
             });
-
-            client.on("message", async (msg, clientId) => {
-                // handle message to specific action according to type
-                let messageType = await messageHandler(client, msg);
-                logger.info(`${messageType} command successfully received.`);
-
-                // save message to database
-                const uploadedMessage = await saveMessage(msg, clientId);
-                if (uploadedMessage) {
-                    console.log(uploadedMessage.chatMessageBody);
-                    logger.info(`Message successfully saved to database.`);
-                }
-                // socket.emit('message', msg);
-            });
-
-            // on message_create
-            client.on("message_create", async (msg, clientId) => {
-                if (!msg) {
-                    logger.error(`Message is empty, skip saving...`);
-                }
-                // save message to database
-                const uploadedMessage = await saveMessage(msg, clientId);
-                if (uploadedMessage) {
-                    console.log(uploadedMessage.chatMessageBody);
-                    logger.info(`Message successfully saved to database.`);
-                }
-            });
-
-            client.on("disconnected", async (reason) => {
-                logger.info(`client ${clientId} disconnected: ${reason}`);
-                delete activeSessions[clientId]; // Remove the session from sessions object
-                // await client.destroy();
-                deleteSession();
-                socket.emit("disconnected", reason);
-                // client.initialize();
-            });
-            client.initialize();
-        });
-    } catch (error) {
-        fs.emptyDir(sessionPath); // Remove all files and subdirectories
-        fs.remove(sessionPath); // Remove the empty directory
-        logger.error(`Error initializing client ${clientId}: ${error}`);
-        logger.info(`Session directory deleted: ${sessionPath}`);
-    }
+        } catch (error) {
+            fs.emptyDir(sessionPath); // Remove all files and subdirectories
+            fs.remove(sessionPath); // Remove the empty directory
+            logger.error(`Error initializing client ${clientId}: ${error}`);
+            logger.info(`Session directory deleted: ${sessionPath}`);
+        }
+    })
 };
 
 app.use(bodyParser.json());
@@ -377,8 +383,8 @@ app.get("/scan/:id", async (req, res) => {
     try {
         console.log("initiating session for client: " + clientId);
         initApp(clientId);
+        // Get all the keys (clientIds) from the activeSessions object
         // res.send(currentQR).Status(200)
-        console.log(activeSessions);
         res.sendFile(__dirname + "/core//index.html");
     } catch (error) {
         if (error instanceof AuthenticationError) {
