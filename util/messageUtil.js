@@ -26,11 +26,11 @@ const saveMessage = async (message, clientId) => {
         logger.info(`Message is not a text message, skip saving...`)
         return
       }
-      if (isGroupMsg == true){
-        conversation = `${numberSender} (group): ${body}`
-        logger.info(`Message is from group, skip saving...`, conversation)
-        return
-      }
+      // if (isGroupMsg == true){
+      //   conversation = `${numberSender} (group): ${body}`
+      //   logger.info(`Message is from group, skip saving...`, conversation)
+      //   return
+      // }
       const payload = {
         chatNumberSender: numberSender,
         chatNumberReceiver: numberReceiver,
@@ -38,7 +38,7 @@ const saveMessage = async (message, clientId) => {
         chatMessageBody: conversation,
         chatIsFromMe: fromMe
       };
-      console.log(payload);
+      // console.log(payload);
 
       // Insert the payload data into the database
     //   const query = `

@@ -30,6 +30,7 @@ const {
     Message,
     Contact,
     Chat,
+
 } = require("whatsapp-web.js");
 
 // import modules from core.js
@@ -42,11 +43,12 @@ const {
 const { saveMessage } = require("./util/messageUtil.js");
 
 const { Pool } = require("pg");
-const { log } = require("console");
 
-// const newUserAgent = 'Looyal EDGE/1.0'
+// const ne`wUserAgent = 'Looyal EDGE/1.0'
 
-let activeSessions = {}; // Menyimpan informasi sesi aktif
+let activeSessions = {} // Menyimpan informasi sesi aktif
+
+
 
 const pool = new Pool({
     user: "postgres",
@@ -67,9 +69,10 @@ const initApp = async (clientId) => {
                         clientId: clientId,
                     }),
                 });
-    
+                client.id = clientId;
                 activeSessions[clientId] = client;
-                // console.log(client)
+
+                console.log(client)
                 client.initialize();
     
                 client.on("authenticated", () => {
@@ -151,9 +154,6 @@ const initApp = async (clientId) => {
                     socket.emit("disconnected", reason);
                     // client.initialize();
                 });
-                
-                const clientIds = Object.keys(activeSessions);
-                logger.info("active sessions: " + clientIds);  
                 resolve(client); 
             });
         } catch (error) {
@@ -164,6 +164,31 @@ const initApp = async (clientId) => {
         }
     })
 };
+
+const getBot = (whatsappId) => {
+    // const keys = Object.keys(activeSessions);
+    // console.log(activeSessions);
+    console.log("get bot")
+    // const sessionArray = Object.values(activeSessions);
+    let sessionIndex = -1;
+    for (const key in activeSessions) {
+        if (activeSessions[key].id === whatsappId) {
+           sessionIndex = whatsappId
+        }
+        logger.info(`Index: ${activeSessions[key].id}`);    
+    }
+
+    // activeSessions.forEach((session) => {
+    //     console.log(`Index:`, session.id);
+    // });
+
+    if (sessionIndex === -1) {
+      throw new Error("ERR_WAPP_NOT_INITIALIZED");
+    }
+
+    return activeSessions[sessionIndex];
+};
+  
 
 app.use(bodyParser.json());
 app.use(bodyParser.urlencoded({ extended: true }));
@@ -206,21 +231,22 @@ app.post(
         } else {
             // let { from, to, type, message, urlni, filename } = req.body;
             let messageDetails = req.body;
-            if (
-                fs.existsSync(
-                    sessionPath.concat(`session-${messageDetails.from}`)
-                )
-            ) {
-                console.log(
-                    "Session path: " +
-                        sessionPath.concat(`session-${messageDetails.from}`)
-                );
-                logger.info("Session exists");
+            if (fs.existsSync(sessionPath.concat(`session-${messageDetails.from}`))) {
+                console.log("Session path: " + sessionPath.concat(`session-${messageDetails.from}`));
+                logger.info("Session Directory exists");
+
                 try {
-                    // console.log('File exists', number);
-                    // let clientId = from
-                    const client = activeSessions[messageDetails.from];
-                    if (!client) {
+                    // console.log(activeSessions[messageDetails.from].info)
+                    const wBot = getBot(messageDetails.from);
+                    // console.log(wBot)
+                    if (wBot.info == undefined) {
+                        logger.info("session not ready for client: " + messageDetails.from);
+                        wBot.initialize()
+                    }
+                    else {
+                        logger.info("session initiated for client: " + wBot.info);
+                    }
+                    if (!wBot) {
                         return res
                             .status(404)
                             .json({ error: "Client not found" });
@@ -229,13 +255,11 @@ app.post(
                     logger.info(
                         "Client found, proceed to send message with messageSender"
                     );
+                    // console.log(wBot.id)
                     // con.gas(message, number, to, type, urlni, filename);
-                    const sentMessageDetails = await messageSender(
-                        client,
-                        messageDetails
-                    );
-                    console.log(sentMessageDetails);
+                    const sentMessageDetails = await messageSender( wBot, messageDetails );
 
+                    console.log(sentMessageDetails);
                     res.writeHead(200, {
                         "Content-Type": "application/json",
                     });
@@ -383,7 +407,7 @@ app.get("/scan/:id", async (req, res) => {
     try {
         console.log("initiating session for client: " + clientId);
         initApp(clientId);
-        // Get all the keys (clientIds) from the activeSessions object
+        // Get all thekeys (clientIds) from the activeSessions object
         // res.send(currentQR).Status(200)
         res.sendFile(__dirname + "/core//index.html");
     } catch (error) {
@@ -393,8 +417,10 @@ app.get("/scan/:id", async (req, res) => {
             );
             res.sendStatus(401); // Send 401 Unauthorized status code
         } else {
-            // Handle other errors
-            res.sendStatus(500); // Send 500 Internal Server Error status code or handle it differently
+        //     // Handle other errors
+        // logger.error(error);
+
+        res.sendStatus(500); // Send 500 Internal Server Error status code or handle it differently
         }
     }
 });
