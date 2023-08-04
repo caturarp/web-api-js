@@ -91,6 +91,12 @@ const messageSender = async (client, messageDetails) => {
   let { from, to, type, message, urlni, filename } = messageDetails;
   const idSend = to + "@s.whatsapp.net";
   try {
+    if (client.info === undefined){
+      console.log('the system is not ready yet');
+      }
+      else{
+      client.sendMessage(phn, msg);
+      }
     const sentMessage = await client.sendMessage(idSend, message);
     logger.info(`Message sent to ${to} from ${from}`);
     return sentMessage;

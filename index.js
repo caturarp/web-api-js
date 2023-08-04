@@ -69,8 +69,9 @@ const initApp = async (clientId) => {
                         clientId: clientId,
                     }),
                 });
-                client.id = clientId;
-                activeSessions[clientId] = client;
+                // 03/08/2023 before 5pm
+                // client.id = clientId;
+                // activeSessions[clientId] = client;
 
                 console.log(client)
                 client.initialize();
@@ -83,6 +84,21 @@ const initApp = async (clientId) => {
                 client.on("qr", async (qr) => {
                     qrcode.generate(qr, { small: true });
                     if (qr) {
+                        //  03/08/2023 before 5pm
+                        let sessionIndex = -1;
+
+                        for (const key in activeSessions) {
+                            if (activeSessions[key].id === clientId) {
+                               sessionIndex = clientId;
+                            }
+                        }
+                    
+                        if (sessionIndex === -1) {
+                            client.id = clientId;
+                            activeSessions[clientId] = client;
+                        }
+
+                        // activeSessions[clientId] = client;
                         qrOption.toDataURL(qr, (err, url) => {
                             if (err) {
                                 console.error("Error generating QR code:", err);
@@ -108,6 +124,19 @@ const initApp = async (clientId) => {
                     logger.info(`client ${clientId} ready!`);
                     console.log(sessionPath.concat(`session-${clientId}`));
                     // socket.emit('ready', {clientId: clientId})
+                    //  03/08/2023 before 5pm
+                    let sessionIndex = -1;
+
+                    for (const key in activeSessions) {
+                        if (activeSessions[key].id === clientId) {
+                           sessionIndex = clientId;
+                        }
+                    }
+                
+                    if (sessionIndex === -1) {
+                        client.id = clientId;
+                        activeSessions[clientId] = client;
+                    }
                 });
     
                 client.on("auth_failure", (msg) => {
@@ -177,10 +206,6 @@ const getBot = (whatsappId) => {
         }
         logger.info(`Index: ${activeSessions[key].id}`);    
     }
-
-    // activeSessions.forEach((session) => {
-    //     console.log(`Index:`, session.id);
-    // });
 
     if (sessionIndex === -1) {
       throw new Error("ERR_WAPP_NOT_INITIALIZED");
