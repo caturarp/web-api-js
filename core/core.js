@@ -93,12 +93,11 @@ const messageSender = async (client, messageDetails) => {
   try {
     if (client.info === undefined){
       console.log('the system is not ready yet');
-      }
-      else{
-      client.sendMessage(phn, msg);
-      }
+    }
     const sentMessage = await client.sendMessage(idSend, message);
+
     logger.info(`Message sent to ${to} from ${from}`);
+    
     return sentMessage;
   } catch (error) {
     logger.error(`Error in sending message to ${to} from ${from}`);

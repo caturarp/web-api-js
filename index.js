@@ -44,6 +44,7 @@ const { connectDevice, disconnectDevice } = require("./util/connectionDeviceUtil
 const { saveMessage } = require("./util/messageUtil.js");
 const { requestProcessor } = require("./util/requestProcessor.js");
 const { Pool } = require("pg");
+const { log } = require("console");
 
 // const ne`wUserAgent = 'Looyal EDGE/1.0'
 
@@ -108,7 +109,7 @@ const initApp = async (clientId) => {
                             // );
                         } else {
                             const base64QR = url.split(",")[1]; // Extract the base64 data from the URL
-                            io.to(deviceNumber).emit("qr", base64QR); // Emit the 'qr' event with the QR code data
+                            io.to(clientId).emit("qr", base64QR); // Emit the 'qr' event with the QR code data
                             // socket.emit("qr", url);
                             // socket.emit(
                             //     "message",
@@ -200,7 +201,7 @@ const startAllSessions = async() => {
         const devices = sessionFolders.filter(folderName => fs.statSync(sessionPath + folderName).isDirectory());
         const promises = devices.map(dirName => {
             const deviceNumber = dirName.replace("session-", "");
-            return initApp(deviceNumber);
+            initApp(deviceNumber);
         });
         await Promise.all(promises);
         console.log("All sessions are running!");
@@ -211,15 +212,17 @@ const startAllSessions = async() => {
 
 const logActiveSessions = () => {
     console.log("Active Sessions:");
-    activeSessions.keys(obj).forEach(key => {
+    Object.keys(activeSessions).forEach(key => {
         console.log(key);
       });
 }
 
 const getBot = (whatsappId) => {
-    console.log(`getting the bot`)
+    console.log(`getting the bot for ${whatsappId}`)
+    console.log(activeSessions[whatsappId].id);
     let sessionIndex = -1;
     for (const key in activeSessions) {
+        console.log(key, activeSessions[key].id);
         if (activeSessions[key].id === whatsappId) {
            sessionIndex = whatsappId
            break;
@@ -304,7 +307,7 @@ app.post(
             );
             const sentMessageDetails = await messageSender( wBot, messageDetails );
 
-            console.log(sentMessageDetails);
+            // console.log(sentMessageDetails);
             res.status(200).json({
                 status: true,
                 message: "Success",
@@ -437,6 +440,6 @@ app.get("/scan/:id", async (req, res) => {
 // start the express server
 server.listen(port, function () {
     console.log(`App running on : ${port}`);
-    logActiveSessions();
     startAllSessions();
+    logActiveSessions();
 });
