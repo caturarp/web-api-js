@@ -3,6 +3,7 @@ const http = require("http");
 const bodyParser = require("body-parser");
 const express = require("express");
 const axios = require("axios");
+const path = require('path');
 
 const app = express();
 const server = http.createServer(app);
@@ -181,7 +182,8 @@ const initApp = async (clientId) => {
                 logger.info(`client ${clientId} disconnected: ${reason}`);
                 delete activeSessions[clientId]; // Remove the session from sessions object
                 // await client.destroy();
-                deleteSession();
+                // deleteSession();
+                // client.logout();
                 // socket.emit("disconnected", reason);
                 // client.initialize();
             });
@@ -220,6 +222,12 @@ const logActiveSessions = () => {
 const getBot = (whatsappId) => {
     console.log(`getting the bot for ${whatsappId}`)
     console.log(activeSessions[whatsappId].id);
+
+    if (!activeSessions[whatsappId]){ 
+        logger.info("session not ready for client: " + whatsappId);
+        return
+    }
+
     let sessionIndex = -1;
     for (const key in activeSessions) {
         console.log(key, activeSessions[key].id);
@@ -256,6 +264,87 @@ app.post("/device", (req, res) => {
     res.redirect("/scan/" + no);
 });
 
+app.get("/disconnect/:id", async (req, res) => {
+    logger.info("disconnecting..." + req.params.id);
+    const no = req.params.id;
+    // const sessionDirExist = fs.existsSync(sessionPath.concat(`session-${no}`))
+    const wBot = getBot(no);
+    const sessionDirectory = path.join(__dirname, 'sessions', `session-${no}`);
+
+    // fs.rm(sessionDirectory, { recursive: true });
+
+    try {
+        
+        if (wBot === undefined) {
+            logger.info(`session ${no} not exist`);
+            return res.status(404).json({ error: "Session Bot not found" });
+        }
+            
+        logger.info(
+            `closing ${no} session`
+        );
+
+        wBot.logout()
+        // res.redirect("/sessions/delete/"+no);
+        setTimeout(() => {
+            try {
+                logger.info("Deleting directory contents recursively...");
+                fs.rm(sessionDirectory, { recursive: true });
+                logger.info(`Session ${no} directory is removed.`);
+                res.status(200).json({
+                    status: true,
+                    message: "Session Disconnected and Directory Removed",
+                });
+            } catch (error) {
+                res.status(500).json({
+                    status: false,
+                    message: "An error occurred while removing the directory",
+                    error: error.message,
+                });
+            }
+        }, 35000); // 15 seconds    
+        // logger.info("Deleting directory contents recursively...");
+        // console.log(sessionPath.concat(`session-${no}`))
+        // fs.rmdirSync(sessionPath, { recursive: true });
+        // rimraf.sync(sessionPath.concat(`session-${no}`, "*")); 
+        // rimraf.sync(sessionPath.concat(`session-${no}`));
+        
+        // logger.info(`Session ${no} is closed.`)    
+        // console.log(sentMessageDetails);
+        // res.status(200).json({
+        //     status: true,
+        //     message: "Session Disconnected",
+        // });
+    } catch (error) {
+        res.status(500).json({
+            status: false,
+            message: "An error occurred",
+            error: error.message,
+        });
+    }
+})
+
+app.get("/sessions/delete/:id", async (req, res) => {
+    const no = req.params.id;
+    const sessionDirectory = path.join(__dirname, 'sessions', `session-${no}`);
+
+    try {
+        logger.info("Deleting directory contents recursively...");
+        fs.rm(sessionDirectory, { recursive: true });
+        logger.info(`Session ${no} directory is removed.`);
+        res.status(200).json({
+            status: true,
+            message: "Session Disconnected and Directory Removed",
+        });
+    } catch (error) {
+        res.status(500).json({
+            status: false,
+            message: "An error occurred while removing the directory",
+            error: error.message,
+        });
+    }
+})
+
 app.post(
     "/send",
     [
@@ -290,13 +379,8 @@ app.post(
         
         try {
             const wBot = getBot(messageDetails.from);
-            if (wBot.info == undefined) {
-                logger.info("session not ready for client: " + messageDetails.from);
-                wBot.initialize()
-            }
-            else {
-                logger.info("session initiated for client: " + wBot.info);
-            }
+            
+            
             if (!wBot) {
                 return res
                     .status(404)
