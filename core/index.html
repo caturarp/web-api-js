@@ -47,15 +47,22 @@
             // socket.emit('initApp');
         });
 
-        // socket.emit('StartConnection',lastSegment);
-        // socket.on('message', function (msg) {
-        //     $('.logs').append($('<li>').text(msg));
+        socket.emit('StartConnection',lastSegment);
+        socket.on('message', function (msg) {
+            $('.logs').append($('<li>').text(msg));
+        });
+
+        // socket.on('qr', function (src) {
+        //     $('#qrcode').attr('src', src);
+        //     $('#qrcode').show();
         // });
 
-        socket.on('qr', function (src) {
-            $('#qrcode').attr('src', src);
-            $('#qrcode').show();
+        socket.on('qr', (base64QR) => {
+            const qrCodeImage = document.getElementById('qrCodeImage');
+            qrCodeImage.src = `data:image/png;base64,${base64QR}`; // Add the 'data:image/png;base64,' prefix
+            console.log('QR Code Base64:', base64QR);
         });
+
         socket.on('authenticated', function () {
             console.log('Client authenticated');
         });
